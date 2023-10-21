@@ -73,17 +73,18 @@ struct ScratchContent {
 
 #[get("/")]
 async fn index(req: HttpRequest) -> Result<NamedFile, Error> {
-    Ok(NamedFile::open("./web/static/index.html")?)
+    Ok(NamedFile::open("/bin/web/static/index.html")?)
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    println!("Hello from server");
     HttpServer::new(|| {
         App::new()
             .service(index)
             .service(editor)
             .service(save_editor)
-            .service(Files::new("/static", "./web/pkg").show_files_listing())
+            .service(Files::new("/static", "/bin/web/pkg").show_files_listing())
     })
     .bind("0.0.0.0:8080")?
     .run()

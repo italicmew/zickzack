@@ -1,10 +1,10 @@
 [package]
-name = "wasm-test"
+name = "zickzack"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "backend"
+name = "zickzack"
 path = "src/bin.rs"
 
 [dependencies]
