@@ -14,6 +14,7 @@ getrandom = { version = "0.2.10", features = ["js"] }
 rand = "0.8.5"
 rand_core = { version = "0.6.4", features = ["getrandom"] }
 wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4.37"
 x25519-dalek = "2"
 
 [dependencies.web-sys]
@@ -24,6 +25,16 @@ features = [
   'HtmlElement',
   'Node',
   'Window',
+  'Location',
+  'Response',
+  'HtmlButtonElement',
+  'Event',
+  'RequestInit',
+  'RequestMode',
+  'Headers',
+  'Request',
+  'console',
+  'HtmlTextAreaElement'
 ]
 
 [package.metadata.wasm-pack.profile.release]

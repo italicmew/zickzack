@@ -1,35 +1,17 @@
 use std::{fs::{self, DirBuilder}, io, path::{Path, PathBuf}};
 use actix_files::{Files, NamedFile};
-use actix_web::{HttpResponse, web::{self, Form}, get, post, HttpServer, App, Error, HttpRequest};
+use actix_web::{HttpResponse, web::{self, Form}, get, post, HttpServer, App, Error, HttpRequest, middleware::Logger};
 use errs::EditorError;
-use path::generate_random_path;
+use path::{generate_random_path, sanitize_path};
 use serde_derive::Deserialize;
 
 mod errs;
 mod path;
 
-fn sanitize_path(input: &str) -> Result<PathBuf, EditorError> {
-    let base  = Path::new("./data");
-    // Step 1: Remove problematic sequences
-    let sanitized_input = input
-        .replace("..", "")
-        .replace("//", "/");
-
-    // Step 2: Construct a path from the sanitized input
-    let path = base.join(sanitized_input);
-
-    // Step 3: Check if the path is still within the base directory
-    if !path.starts_with(base) {
-        return Err(EditorError::InvalidPath);
-    }
-
-    Ok(path)
-}
-
 #[get("/editor/{path:.*}")]
 async fn editor(path: web::Path<String>) -> Result<HttpResponse, EditorError> {
     let content = load_content_from_path(&path.into_inner());
-    Ok(HttpResponse::Ok().body(format!("<textarea>{}</textarea>", content)))
+    Ok(HttpResponse::Ok().body(format!("{}", content)))
 }
 
 fn load_content_from_path(path: &str) -> String {
@@ -75,7 +57,7 @@ struct ScratchContent {
 
 #[get("/{tail:.*}")]
 async fn index() -> Result<NamedFile, Error> {
-    Ok(NamedFile::open("/bin/web/static/index.html")?)
+    Ok(NamedFile::open("./web/static/index.html")?)
 }
 
 async fn redirect_to_random_path() -> HttpResponse {
@@ -85,14 +67,16 @@ async fn redirect_to_random_path() -> HttpResponse {
 
 
 #[actix_web::main]
-async fn main() -> std::io::Result<()> { 
+async fn main() -> std::io::Result<()> {
+    env_logger::init();
     println!("Hello from server");
     HttpServer::new(|| {
         App::new()
+            .wrap(Logger::default())
             .route("/", web::get().to(redirect_to_random_path))
             .service(editor)
             .service(save_editor)
-            .service(Files::new("/static", "/bin/web/static").show_files_listing())
+            .service(Files::new("/static", "./web/static").show_files_listing())
             .service(index)
     })
     .bind("0.0.0.0:8080")?

@@ -1,4 +1,8 @@
+use std::path::{PathBuf, Path};
+
 use rand::{thread_rng, distributions::Alphanumeric, Rng};
+
+use crate::errs::EditorError;
 
 const SEGMENT_LENGTH: usize = 10;
 const NUMBER_OF_SEGMENTS: usize = 3;
@@ -17,4 +21,22 @@ pub fn generate_random_path() -> String {
         .collect();
 
     segments.join("/")
+}
+
+pub fn sanitize_path(input: &str) -> Result<PathBuf, EditorError> {
+    let base  = Path::new("./data");
+    // Step 1: Remove problematic sequences
+    let sanitized_input = input
+        .replace("..", "")
+        .replace("//", "/");
+
+    // Step 2: Construct a path from the sanitized input
+    let path = base.join(sanitized_input);
+
+    // Step 3: Check if the path is still within the base directory
+    if !path.starts_with(base) {
+        return Err(EditorError::InvalidPath);
+    }
+
+    Ok(path)
 }
