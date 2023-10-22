@@ -2,9 +2,11 @@ use std::{fs::{self, DirBuilder}, io, path::{Path, PathBuf}};
 use actix_files::{Files, NamedFile};
 use actix_web::{HttpResponse, web::{self, Form}, get, post, HttpServer, App, Error, HttpRequest};
 use errs::EditorError;
+use path::generate_random_path;
 use serde_derive::Deserialize;
 
 mod errs;
+mod path;
 
 fn sanitize_path(input: &str) -> Result<PathBuf, EditorError> {
     let base  = Path::new("./data");
@@ -71,20 +73,27 @@ struct ScratchContent {
     content: String,
 }
 
-#[get("/")]
-async fn index(req: HttpRequest) -> Result<NamedFile, Error> {
+#[get("/{tail:.*}")]
+async fn index() -> Result<NamedFile, Error> {
     Ok(NamedFile::open("/bin/web/static/index.html")?)
 }
 
+async fn redirect_to_random_path() -> HttpResponse {
+    let random_path = generate_random_path();
+    HttpResponse::Found().append_header(("Location", format!("/{}", random_path))).finish()
+}
+
+
 #[actix_web::main]
-async fn main() -> std::io::Result<()> {
+async fn main() -> std::io::Result<()> { 
     println!("Hello from server");
     HttpServer::new(|| {
         App::new()
-            .service(index)
+            .route("/", web::get().to(redirect_to_random_path))
             .service(editor)
             .service(save_editor)
-            .service(Files::new("/static", "/bin/web/pkg").show_files_listing())
+            .service(Files::new("/static", "/bin/web/static").show_files_listing())
+            .service(index)
     })
     .bind("0.0.0.0:8080")?
     .run()

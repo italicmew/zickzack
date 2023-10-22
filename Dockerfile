@@ -53,8 +53,9 @@ USER appuser
 
 # Copy the executable from the "build" stage.
 COPY --from=build /bin/server /bin/
-COPY --from=build_wasm /app/web/pkg /bin/web/pkg
-COPY ./web/static /bin/web/static
+COPY --from=build_wasm /app/web/pkg /bin/web/static
+COPY ./web/static/* /bin/web/static
+
 
 # Expose the port that the application listens on.
 EXPOSE 8080

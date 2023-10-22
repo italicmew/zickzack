@@ -1244,6 +1244,7 @@ dependencies = [
  "actix-rt",
  "actix-web",
  "derive_more",
+ "rand",
  "serde",
  "serde_derive",
 ]
