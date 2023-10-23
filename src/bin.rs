@@ -1,6 +1,6 @@
-use std::{fs::{self, DirBuilder}, io, path::{Path, PathBuf}};
+use std::{fs::{self, DirBuilder}, io, path::PathBuf};
 use actix_files::{Files, NamedFile};
-use actix_web::{HttpResponse, web::{self, Form}, get, post, HttpServer, App, Error, HttpRequest, middleware::Logger};
+use actix_web::{HttpResponse, web::{self, Form}, get, post, HttpServer, App, Error, middleware::Logger};
 use errs::EditorError;
 use path::{generate_random_path, sanitize_path};
 use serde_derive::Deserialize;
@@ -57,7 +57,7 @@ struct ScratchContent {
 
 #[get("/{tail:.*}")]
 async fn index() -> Result<NamedFile, Error> {
-    Ok(NamedFile::open("./web/static/index.html")?)
+    Ok(NamedFile::open("/bin/web/static/index.html")?)
 }
 
 async fn redirect_to_random_path() -> HttpResponse {
@@ -76,7 +76,7 @@ async fn main() -> std::io::Result<()> {
             .route("/", web::get().to(redirect_to_random_path))
             .service(editor)
             .service(save_editor)
-            .service(Files::new("/static", "./web/static").show_files_listing())
+            .service(Files::new("/static", "/bin/web/static").show_files_listing())
             .service(index)
     })
     .bind("0.0.0.0:8080")?

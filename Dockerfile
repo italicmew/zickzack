@@ -40,16 +40,6 @@ EOF
 
 FROM debian:bullseye-slim AS final
 
-ARG UID=10001
-RUN adduser \
-    --disabled-password \
-    --gecos "" \
-    --home "/nonexistent" \
-    --shell "/sbin/nologin" \
-    --no-create-home \
-    --uid "${UID}" \
-    appuser
-USER appuser
 
 # Copy the executable from the "build" stage.
 COPY --from=build /bin/server /bin/
