@@ -1,4 +1,5 @@
-use std::ops;
+use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
 
 use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit, OsRng},
@@ -7,12 +8,23 @@ use aes_gcm::{
 
 // The wasm-pack uses wasm-bindgen to build and generate JavaScript binding file.
 // Import the wasm-bindgen crate.
-use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
     Document, Event, Headers, HtmlButtonElement, HtmlTextAreaElement, Location, Request,
-    RequestInit, RequestMode, Response, Window,
+    RequestInit, RequestMode, Response, Window, HtmlElement
 };
+
+#[wasm_bindgen]
+pub fn show_alert() {
+    let window: Window = web_sys::window().expect("no global `window` exists");
+    let document: Document = window.document().expect("should have a document on window");
+    if let Some(alert) = document.get_element_by_id("alerts") {
+        if let Some(html_element) = alert.dyn_ref::<HtmlElement>() {
+            html_element.style().set_property("display", "block").unwrap();
+        }
+    }
+}
+
 
 #[wasm_bindgen]
 pub fn setup_submit_listener() -> Result<(), JsValue> {
@@ -57,6 +69,7 @@ pub fn setup_submit_listener() -> Result<(), JsValue> {
         match Request::new_with_str_and_init(&path, &opts) {
             Ok(request) => {
                 let _ = w.fetch_with_request(&request);
+                show_alert();
             }
             Err(request_error) => {
                 web_sys::console::log_1(&JsValue::from_str(&format!(
@@ -134,9 +147,7 @@ async fn main() -> Result<(), JsValue> {
     Ok(())
 }
 
-// Our Add function
-// wasm-pack requires "exported" functions
-// to include #[wasm_bindgen]
+// hello world
 #[wasm_bindgen]
 pub fn add(a: i32, b: i32) -> i32 {
     return a + b;

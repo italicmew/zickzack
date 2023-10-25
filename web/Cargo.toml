@@ -34,7 +34,9 @@ features = [
   'Headers',
   'Request',
   'console',
-  'HtmlTextAreaElement'
+  'HtmlTextAreaElement',
+  'DomTokenList',
+  'CssStyleDeclaration',
 ]
 
 [package.metadata.wasm-pack.profile.release]
