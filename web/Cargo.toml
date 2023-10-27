@@ -10,6 +10,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 aes-gcm = "0.10.3"
+base64 = "0.21.5"
 getrandom = { version = "0.2.10", features = ["js"] }
 hex = "0.4.3"
 rand = "0.8.5"
@@ -38,6 +39,7 @@ features = [
   'HtmlTextAreaElement',
   'DomTokenList',
   'CssStyleDeclaration',
+  'HtmlInputElement',
 ]
 
 [package.metadata.wasm-pack.profile.release]

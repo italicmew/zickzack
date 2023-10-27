@@ -30,7 +30,7 @@
 
 <h2 class="mb-4">Secret Scratchpad</h2>
 <textarea id="editor" class="form-control mb-4" rows="10" placeholder="Enter your text here..."></textarea>
-<input type="text" id="keyInput" class="form-control mb-4" placeholder="Enter AES-GCM Key">
+<input type="text" id="key-aes" class="form-control mb-4" placeholder="Enter AES-GCM Key">
 <button id="submitBtn" class="btn btn-primary">Submit</button>
 
 <!-- Note the usage of `type=module` here as this is an ES6 module -->
@@ -43,6 +43,36 @@
   // don't support natively imported WebAssembly as an ES module, but
   // eventually the manual initialization won't be required!
   import init, { add } from '/static/web.js';
+
+  async function generateKey() {
+    let rawKey = await window.crypto.subtle.generateKey(
+      {
+        name: "AES-GCM",
+        length: 256
+      },
+      true,
+      ["encrypt", "decrypt"]
+    );
+
+    // Export the raw key as an ArrayBuffer
+    let exportedRawKey = await window.crypto.subtle.exportKey("raw", rawKey);
+    // Convert the ArrayBuffer to a base64 string
+    let base64Key = arrayBufferToBase64(exportedRawKey);
+    return base64Key;
+  }
+
+  function arrayBufferToBase64(buffer) {
+    let binary = '';
+    let bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+}
+
+  generateKey().then(key => {
+        document.getElementById('key-aes').value = key;
+    });
 
   async function run() {
     // First up we need to actually load the wasm file, so we use the
