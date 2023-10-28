@@ -1,11 +1,9 @@
-use std::error::Error;
-
 use rusqlite::{Connection, params};
 use serde_derive::{Serialize, Deserialize};
+use sha2::{Digest, Sha256};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Data {
-    id: i32,
     url: String,
     data: Option<Vec<u8>>,
     nonce: Option<Vec<u8>>,
@@ -14,7 +12,6 @@ struct Data {
 struct Database {
     conn: Connection,
 }
-
 
 impl Database {
     pub fn new(db_path: &str) -> Result<Self, rusqlite::Error> {
@@ -25,7 +22,7 @@ impl Database {
     pub fn create_db(&self) -> Result<usize, rusqlite::Error> {
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS data (
-                id INTEGER PRIMARY KEY,
+                id TEXT PRIMARY KEY,
                 url TEXT NOT NULL,
                 data BLOB,
                 nonce BLOB
@@ -35,19 +32,26 @@ impl Database {
     }
 
     pub fn save_data(&self, data: &Data) -> Result<(), rusqlite::Error> {
+        let mut hasher = Sha256::new();
+        hasher.update(&data.url);
+        let id = format!("{:x}", hasher.finalize());
+
         self.conn.execute(
             "INSERT INTO data (id, url, data, nonce) VALUES (?1, ?2, ?3, ?4)",
-            params![data.id, data.url, data.data.as_deref(), data.nonce.as_deref()],
+            params![id, data.url, data.data.as_deref(), data.nonce.as_deref()],
         )?;
         Ok(())
     }
 
-    pub fn get_data(&self, target_id: i32) -> Result<Option<Data>, rusqlite::Error> {
+    pub fn get_data(&self, url: String) -> Result<Option<Data>, rusqlite::Error> {
+
+        let mut hasher = Sha256::new();
+        hasher.update(&url);
+        let id = format!("{:x}", hasher.finalize());
         let mut stmt = self.conn.prepare("SELECT id, url, data, nonce FROM data WHERE id = ?1")?;
 
-        let mut data_iter = stmt.query_map(params![target_id], |row| {
+        let mut data_iter = stmt.query_map(params![id], |row| {
             Ok(Data {
-                id: row.get(0)?,
                 url: row.get(1)?,
                 data: row.get(2)?,
                 nonce: row.get(3)?,
@@ -73,7 +77,6 @@ mod tests {
         db.create_db().unwrap();
 
         let example_data = Data {
-            id: 2,
             url: "http://example.com".to_string(),
             data: Some(vec![1, 2, 3, 4, 5]),
             nonce: Some(vec![5, 4, 3, 2, 1]),
@@ -81,7 +84,7 @@ mod tests {
 
         db.save_data(&example_data).unwrap();
 
-        let result = db.get_data(example_data.id).expect("Failed to retrieve data from database");
+        let result = db.get_data("http://example.com".to_string()).expect("Failed to retrieve data from database");
         assert_eq!(result.map(|r| r.data), Some(example_data.data), "Retrieved data does not match saved data");
     }
 }
