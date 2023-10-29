@@ -1,8 +1,6 @@
-use std::iter::Cycle;
-
 use aes_gcm::aead::generic_array::GenericArray;
-use base64::Engine;
 use base64::engine::general_purpose;
+use base64::Engine;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
@@ -15,7 +13,7 @@ use aes_gcm::{
 // Import the wasm-bindgen crate.
 use wasm_bindgen_futures::JsFuture;
 use web_sys::HtmlInputElement;
-use web_sys::console::count;
+
 use web_sys::{
     Document, Event, Headers, HtmlButtonElement, HtmlElement, HtmlTextAreaElement, Location,
     Request, RequestInit, RequestMode, Response, Window,
@@ -60,13 +58,14 @@ pub fn setup_submit_listener() -> Result<(), JsValue> {
             .and_then(|el| el.dyn_into::<HtmlTextAreaElement>().ok())
             .map(|text_area| text_area.value());
 
-
         let key: Option<String> = document
             .get_element_by_id("key-aes")
             .and_then(|el| el.dyn_into::<HtmlInputElement>().ok())
             .map(|text_area| text_area.value());
 
-        let bytes = general_purpose::STANDARD.decode(key.unwrap_or_default()).unwrap();
+        let bytes = general_purpose::STANDARD
+            .decode(key.unwrap_or_default())
+            .unwrap();
 
         let enc = encrypt_message(&bytes, text.clone().unwrap_or_default().as_str());
         web_sys::console::log_1(&JsValue::from_str(&format!("content={:?}", enc)));
@@ -114,15 +113,11 @@ pub fn setup_submit_listener() -> Result<(), JsValue> {
     Ok(())
 }
 
-fn decrypt_message(
-    key: &str,
-    message: &[u8],
-) -> Result<String, Box<dyn std::error::Error>> {
-    
+fn decrypt_message(key: &str, message: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
     if message.len() < 18 || &message[0..3] != &[0xFF, 0xFF, 0xFF] {
         return Ok(String::from_utf8(message.to_vec())?);
     }
-    
+
     if key.as_bytes().len() != 32 {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -134,7 +129,9 @@ fn decrypt_message(
     let nonce = &message[3..15];
 
     let cipher = Aes256Gcm::new(GenericArray::from_slice(key.as_bytes()));
-    let plaintext_bytes = cipher.decrypt(&GenericArray::from_slice(nonce), mem).unwrap();
+    let plaintext_bytes = cipher
+        .decrypt(&GenericArray::from_slice(nonce), mem)
+        .unwrap();
 
     Ok(String::from_utf8(plaintext_bytes)?)
 }
@@ -146,7 +143,8 @@ fn encrypt_message(key: &[u8], text: &str) -> Result<Vec<u8>, aes_gcm::aead::Err
 
     let cipher = Aes256Gcm::new(GenericArray::from_slice(key));
     let mut nonce = Aes256Gcm::generate_nonce(&mut rand::rngs::OsRng).to_vec();
-    let mut ciphertext = cipher.encrypt(&GenericArray::from_slice(nonce.as_slice()), text.as_ref())?;
+    let mut ciphertext =
+        cipher.encrypt(&GenericArray::from_slice(nonce.as_slice()), text.as_ref())?;
 
     let mut message = vec![0xff, 0xff, 0xff];
 
@@ -163,7 +161,7 @@ async fn main() -> Result<(), JsValue> {
     let document: Document = w
         .document()
         .ok_or_else(|| JsValue::from_str("No document available"))?;
-    
+
     let text_area = document
         .get_element_by_id("editor")
         .expect("Element not found.");
@@ -206,14 +204,13 @@ mod tests {
         let key = "12341234123412341234123412341234";
         let text = "my test text";
         let ret = encrypt_message(key.as_bytes(), text).unwrap();
-        
+
         assert_eq!(&ret[0..=2], vec![0xFF, 0xFF, 0xFF]);
-        
+
         let decrypted = decrypt_message(key, &ret).unwrap();
         assert_eq!(decrypted, text);
 
-
-        let not_encr = decrypt_message("", "text".as_bytes()).unwrap();     
-        assert_eq!(not_encr, "text")  
+        let not_encr = decrypt_message("", "text".as_bytes()).unwrap();
+        assert_eq!(not_encr, "text")
     }
 }
