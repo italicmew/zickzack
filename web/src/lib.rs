@@ -1,6 +1,10 @@
 use aes_gcm::aead::generic_array::GenericArray;
 use base64::engine::general_purpose;
 use base64::Engine;
+use serde_derive::Deserialize;
+use serde_derive::Serialize;
+use serde_json;
+use serde_wasm_bindgen::from_value;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
@@ -33,6 +37,50 @@ pub fn show_alert() {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Data {
+    url: String,
+    data: Option<Vec<u8>>,
+}
+
+#[wasm_bindgen]
+pub fn setup_decrypter_listener() -> Result<(), JsValue> {
+    let w: Window =
+        web_sys::window().ok_or_else(|| JsValue::from_str("No global `window` exists"))?;
+    let document: Document = w
+        .document()
+        .ok_or_else(|| JsValue::from_str("No document available"))?;
+
+    let btn = match document.get_element_by_id("decryptBtn") {
+        Some(button) => match button.dyn_into::<HtmlButtonElement>() {
+            Ok(btn) => Ok(btn),
+            Err(_) => Err("Failed to cast element to HtmlButtonElement"),
+        },
+        None => Err("Element with ID 'submitBtn' not found"),
+    };
+
+    let closure = Closure::wrap(Box::new(move |event: Event| {
+        // Prevent the default form submit action
+        event.prevent_default();
+
+        // code to get and decrypt the message.
+
+    }) as Box<dyn FnMut(_)>);
+
+    match btn {
+        Ok(btn) => {
+            btn.add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())?;
+        }
+        Err(e) => {
+            web_sys::console::log_1(&JsValue::from_str(&format!("content={}", e)));
+        }
+    }
+
+    closure.forget(); // Forget the closure to prevent it from being cleaned up
+
+    Ok(())
+}
+
 #[wasm_bindgen]
 pub fn setup_submit_listener() -> Result<(), JsValue> {
     let w: Window =
@@ -58,26 +106,45 @@ pub fn setup_submit_listener() -> Result<(), JsValue> {
             .and_then(|el| el.dyn_into::<HtmlTextAreaElement>().ok())
             .map(|text_area| text_area.value());
 
-        let key: Option<String> = document
+        let mut key: Option<String> = document
             .get_element_by_id("key-aes")
             .and_then(|el| el.dyn_into::<HtmlInputElement>().ok())
             .map(|text_area| text_area.value());
 
-        let bytes = general_purpose::STANDARD
-            .decode(key.unwrap_or_default())
-            .unwrap();
+        key = key.filter(|s| !s.is_empty());
 
-        let enc = encrypt_message(&bytes, text.clone().unwrap_or_default().as_str());
-        web_sys::console::log_1(&JsValue::from_str(&format!("content={:?}", enc)));
+        let s = text.unwrap().into_bytes();
+        web_sys::console::log_1(&JsValue::from_str(&format!(
+            "content={}",
+            std::str::from_utf8(&s).unwrap()
+        )));
+        web_sys::console::log_1(&JsValue::from_str(&format!("Some key={:?}", key)));
+
+        let d = match key {
+            Some(k) => {
+                web_sys::console::log_1(&JsValue::from_str(&format!("key={:?}", k)));
+                let bytes = general_purpose::STANDARD.decode(k).unwrap();
+                let enc = encrypt_message(&bytes, std::str::from_utf8(&s).unwrap());
+                Data {
+                    url: w.location().pathname().unwrap(),
+                    data: Some(enc.unwrap_or_default()),
+                }
+            }
+            None => Data {
+                url: w.location().pathname().unwrap(),
+                data: Some(s),
+            },
+        };
+
+        web_sys::console::log_1(&JsValue::from_str(&format!("content={:?}", d)));
 
         // Create the request
         let mut opts = RequestInit::new();
         let headers = Headers::new().unwrap();
-        headers
-            .append("Content-Type", "application/octet-stream")
-            .unwrap();
+        headers.append("Content-Type", "application/json").unwrap();
 
-        let content = format!("content={}", text.unwrap_or_default());
+        let serialized = serde_json::to_string(&d).unwrap();
+        let content = format!("{}", serialized);
         opts.method("POST")
             .mode(RequestMode::Cors)
             .headers(&headers)
@@ -173,12 +240,28 @@ async fn main() -> Result<(), JsValue> {
     let editor_url = format!("/editor{}", current_path);
     let promise = w.fetch_with_str(&editor_url);
     let response: Response = JsFuture::from(promise).await?.dyn_into()?;
-    let text: String = JsFuture::from(response.text()?)
-        .await?
-        .as_string()
-        .unwrap_or_default();
 
-    text_area.set_text_content(Some(&text));
+    if response.ok() {
+        let json: JsValue = JsFuture::from(response.json()?).await?;
+        let data: Data = from_value(json)?;
+        let s = data.data.clone().unwrap();
+        if &s[0..3] == &[0xFF, 0xFF, 0xFF] {
+            text_area.set_text_content(Some("Data is encrypted!"));
+            let button: HtmlButtonElement = document
+                .get_element_by_id("submitBtn")
+                .expect("No element with ID `submitBtn`")
+                .dyn_into::<HtmlButtonElement>()?;
+
+            button.set_disabled(true);
+        } else {
+            let display_text = data.data.map_or_else(String::new, |v| {
+                // assuming data is UTF-8 encoded
+                String::from_utf8_lossy(&v).into_owned()
+            });
+            text_area.set_text_content(Some(&display_text));
+        }
+    }
+
     setup_submit_listener().unwrap();
 
     Ok(())

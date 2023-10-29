@@ -1,58 +1,50 @@
-use std::{fs::{self, DirBuilder}, io, path::PathBuf};
 use actix_files::{Files, NamedFile};
-use actix_web::{HttpResponse, web::{self, Form}, get, post, HttpServer, App, Error, middleware::Logger};
+use actix_web::{
+    get,
+    middleware::Logger,
+    post,
+    web::{self},
+    App, Error, HttpResponse, HttpServer, Responder,
+};
 use errs::EditorError;
-use path::{generate_random_path, sanitize_path};
-use serde_derive::Deserialize;
+use path::generate_random_path;
 
+use crate::db::{Data, Database};
+
+mod db;
 mod errs;
 mod path;
 
 #[get("/editor/{path:.*}")]
-async fn editor(path: web::Path<String>) -> Result<HttpResponse, EditorError> {
-    let content = load_content_from_path(&path.into_inner());
-    Ok(HttpResponse::Ok().body(format!("{}", content)))
-}
+async fn editor(path: web::Path<String>) -> impl Responder {
+    let connection_string = "files.db";
+    match Database::new(connection_string) {
+        Ok(db) => {
+            db.create_db().map_err(|_| EditorError::ContentNotFound)?;
 
-fn load_content_from_path(path: &str) -> String {
-    let path = sanitize_path(path).unwrap(); //TODO: handle error
-    fs::read_to_string(&path).unwrap_or_default()
-}
-
-fn create_parent_directory(path: &PathBuf) -> Result<(), EditorError> {
-    if let Some(parent_dir) = std::path::Path::new(path).parent() {
-        DirBuilder::new().recursive(true).create(parent_dir)
-            .map_err(|_| EditorError::DirectoryCreationFailure)?;
-    } else {
-        return Err(EditorError::InvalidPath);
+            match db.get_data(path.as_str().to_string()) {
+                Ok(Some(data)) => Ok(HttpResponse::Ok().json(data)),
+                Ok(None) => Ok(HttpResponse::NotFound().body("Data not found")),
+                Err(_) => Err(EditorError::ContentNotFound),
+            }
+        }
+        Err(_) => Err(EditorError::ContentNotFound),
     }
-    Ok(())
-}
-
-fn save_to_storage(storage_path: &PathBuf, content: &str) -> Result<(), EditorError> {
-    fs::write(storage_path, content).map_err(|_| EditorError::SaveFailure)
 }
 
 #[post("/editor/{path:.*}")]
-async fn save_editor(path: web::Path<String>, data: Form<ScratchContent>) -> Result<HttpResponse, EditorError> {
-    let storage_path = sanitize_path(path.as_str()).unwrap();
-
-    match fs::write(&storage_path, &data.content) {
-        Ok(_) => Ok(HttpResponse::Ok().body("Saved successfully!")),
-        Err(err) if err.kind() == io::ErrorKind::NotFound => {
-            create_parent_directory(&storage_path)?;
-            match save_to_storage(&storage_path, &data.content) {
-                Ok(_) => Ok(HttpResponse::Ok().body("Saved successfully!")),
-                Err(_) => Err(EditorError::SaveFailure),
-            }
-        },
-        Err(_) => Err(EditorError::SaveFailure),
+async fn save_editor(data: web::Json<Data>) -> Result<HttpResponse, EditorError> {
+    println!("{:?}", data);
+    let connection_string = "files.db";
+    match Database::new(connection_string) {
+        Ok(db) => {
+            db.create_db().map_err(|_| EditorError::ContentNotFound)?;
+            db.save_data(&data.into_inner())
+                .map_err(|_| EditorError::ContentNotFound)?;
+            Ok(HttpResponse::Ok().body("Data saved successfully"))
+        }
+        Err(_) => Err(EditorError::ContentNotFound),
     }
-}
-
-#[derive(Deserialize)]
-struct ScratchContent {
-    content: String,
 }
 
 #[get("/{tail:.*}")]
@@ -62,9 +54,10 @@ async fn index() -> Result<NamedFile, Error> {
 
 async fn redirect_to_random_path() -> HttpResponse {
     let random_path = generate_random_path();
-    HttpResponse::Found().append_header(("Location", format!("/{}", random_path))).finish()
+    HttpResponse::Found()
+        .append_header(("Location", format!("/{}", random_path)))
+        .finish()
 }
-
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {

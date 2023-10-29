@@ -3,12 +3,21 @@ use serde_derive::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 #[derive(Debug, Serialize, Deserialize)]
-struct Data {
-    url: String,
-    data: Option<Vec<u8>>,
+pub struct Data {
+    pub url: String,
+    pub data: Option<Vec<u8>>,
 }
 
-struct Database {
+impl Data {
+    pub fn url_to_hash(&self) -> String {
+        let mut hasher = Sha256::new();
+        let s = self.url.replace("/", "");
+        hasher.update(s);
+        format!("{:x}", hasher.finalize())
+    }
+}
+
+pub struct Database {
     conn: Connection,
 }
 
@@ -30,24 +39,23 @@ impl Database {
     }
 
     pub fn save_data(&self, data: &Data) -> Result<(), rusqlite::Error> {
-        let mut hasher = Sha256::new();
-        hasher.update(&data.url);
-        let id = format!("{:x}", hasher.finalize());
-
+        println!("set: {}", data.url);
+        let encoded_url = data.url_to_hash();
         self.conn.execute(
             "INSERT INTO data (id, url, data) 
             VALUES (?1, ?2, ?3)
             ON CONFLICT(id) DO UPDATE SET
                 url = excluded.url,
                 data = excluded.data;",
-            params![id, data.url, data.data.as_deref()],
+            params![encoded_url, data.url, data.data.as_deref()],
         )?;
         Ok(())
     }
 
     pub fn get_data(&self, url: String) -> Result<Option<Data>, rusqlite::Error> {
+        let s = url.replace("/", "");
         let mut hasher = Sha256::new();
-        hasher.update(&url);
+        hasher.update(&s);
         let id = format!("{:x}", hasher.finalize());
         let mut stmt = self
             .conn
@@ -91,6 +99,18 @@ mod tests {
             result.map(|r| r.data),
             Some(example_data.data),
             "Retrieved data does not match saved data"
+        );
+    }
+
+    #[test]
+    fn hash_url_test() {
+        let d = Data {
+            url: "http://example.com".to_string(),
+            data: Some(vec![1, 2, 3, 4, 5]),
+        };
+        assert_eq!(
+            "2e897c7322de8382a9364ed19e301bae07a248fd251964c1c383d9b2183016c3",
+            d.url_to_hash()
         );
     }
 }
