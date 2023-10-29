@@ -1,3 +1,5 @@
+use std::iter::Cycle;
+
 use aes_gcm::aead::generic_array::GenericArray;
 use base64::Engine;
 use base64::engine::general_purpose;
@@ -13,6 +15,7 @@ use aes_gcm::{
 // Import the wasm-bindgen crate.
 use wasm_bindgen_futures::JsFuture;
 use web_sys::HtmlInputElement;
+use web_sys::console::count;
 use web_sys::{
     Document, Event, Headers, HtmlButtonElement, HtmlElement, HtmlTextAreaElement, Location,
     Request, RequestInit, RequestMode, Response, Window,
@@ -72,7 +75,7 @@ pub fn setup_submit_listener() -> Result<(), JsValue> {
         let mut opts = RequestInit::new();
         let headers = Headers::new().unwrap();
         headers
-            .append("Content-Type", "application/x-www-form-urlencoded")
+            .append("Content-Type", "application/octet-stream")
             .unwrap();
 
         let content = format!("content={}", text.unwrap_or_default());
@@ -113,29 +116,43 @@ pub fn setup_submit_listener() -> Result<(), JsValue> {
 
 fn decrypt_message(
     key: &str,
-    nonce: &Vec<u8>,
-    ciphertext: &[u8],
-) -> Result<Vec<u8>, aes_gcm::aead::Error> {
+    message: &[u8],
+) -> Result<String, Box<dyn std::error::Error>> {
     if key.as_bytes().len() != 32 {
-        return Err(aes_gcm::aead::Error);
+        return Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Invalid key length",
+        )));
     }
 
-    let cipher = Aes256Gcm::new(GenericArray::from_slice(key.as_bytes()));
-    let plaintext = cipher.decrypt(&GenericArray::from_slice(nonce), ciphertext);
+    if message.len() < 18 || &message[0..3] != &[0xFF, 0xFF, 0xFF] {
+        return Ok(String::from_utf8(message.to_vec())?);
+    }
 
-    plaintext
+    let mem = &message[15..];
+    let nonce = &message[3..15];
+
+    let cipher = Aes256Gcm::new(GenericArray::from_slice(key.as_bytes()));
+    let plaintext_bytes = cipher.decrypt(&GenericArray::from_slice(nonce), mem).unwrap();
+
+    Ok(String::from_utf8(plaintext_bytes)?)
 }
 
-fn encrypt_message(key: &[u8], text: &str) -> Result<(Vec<u8>, Vec<u8>), aes_gcm::aead::Error> {
+fn encrypt_message(key: &[u8], text: &str) -> Result<Vec<u8>, aes_gcm::aead::Error> {
     if key.len() != 32 {
         return Err(aes_gcm::aead::Error);
     }
 
     let cipher = Aes256Gcm::new(GenericArray::from_slice(key));
-    let nonce = Aes256Gcm::generate_nonce(&mut rand::rngs::OsRng).to_vec();
-    let ciphertext = cipher.encrypt(&GenericArray::from_slice(nonce.as_slice()), text.as_ref())?;
+    let mut nonce = Aes256Gcm::generate_nonce(&mut rand::rngs::OsRng).to_vec();
+    let mut ciphertext = cipher.encrypt(&GenericArray::from_slice(nonce.as_slice()), text.as_ref())?;
 
-    Ok((nonce, ciphertext))
+    let mut message = vec![0xff, 0xff, 0xff];
+
+    message.append(&mut nonce);
+    message.append(&mut ciphertext);
+
+    Ok(message)
 }
 
 #[wasm_bindgen(start)]
@@ -188,8 +205,10 @@ mod tests {
         let key = "12341234123412341234123412341234";
         let text = "my test text";
         let ret = encrypt_message(key.as_bytes(), text).unwrap();
-        let decrypted = decrypt_message(key, &ret.0, &ret.1).unwrap();
-
-        assert_eq!(decrypted, text.as_bytes());
+        
+        assert_eq!(&ret[0..=2], vec![0xFF, 0xFF, 0xFF]);
+        
+        let decrypted = decrypt_message(key, &ret).unwrap();
+        assert_eq!(decrypted, text);
     }
 }
