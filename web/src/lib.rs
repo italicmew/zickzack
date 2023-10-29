@@ -118,15 +118,16 @@ fn decrypt_message(
     key: &str,
     message: &[u8],
 ) -> Result<String, Box<dyn std::error::Error>> {
+    
+    if message.len() < 18 || &message[0..3] != &[0xFF, 0xFF, 0xFF] {
+        return Ok(String::from_utf8(message.to_vec())?);
+    }
+    
     if key.as_bytes().len() != 32 {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             "Invalid key length",
         )));
-    }
-
-    if message.len() < 18 || &message[0..3] != &[0xFF, 0xFF, 0xFF] {
-        return Ok(String::from_utf8(message.to_vec())?);
     }
 
     let mem = &message[15..];
@@ -210,5 +211,9 @@ mod tests {
         
         let decrypted = decrypt_message(key, &ret).unwrap();
         assert_eq!(decrypted, text);
+
+
+        let not_encr = decrypt_message("", "text".as_bytes()).unwrap();     
+        assert_eq!(not_encr, "text")  
     }
 }
