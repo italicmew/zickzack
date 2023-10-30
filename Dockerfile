@@ -2,9 +2,10 @@
 
 ARG RUST_VERSION=1.72.1
 ARG APP_NAME=zickzack
-FROM rust:${RUST_VERSION}-slim-bullseye AS build
+FROM rust:${RUST_VERSION}-bullseye AS build
 ARG APP_NAME
 WORKDIR /app
+RUN apt update && apt-get install sqlite3
 
 RUN --mount=type=bind,source=src,target=src \
     --mount=type=bind,source=Cargo.toml,target=Cargo.toml \
@@ -18,10 +19,9 @@ cp ./target/release/$APP_NAME /bin/server
 EOF
 
 
-FROM rust:${RUST_VERSION}-buster AS build_wasm
+FROM rust:${RUST_VERSION}-bullseye AS build_wasm
 ARG APP_NAME
 WORKDIR /app
-
 RUN rustup target add wasm32-unknown-unknown
 RUN --mount=type=bind,source=web/src,target=web/src \
     --mount=type=bind,source=web/static,target=web/static \
@@ -38,7 +38,7 @@ wasm-pack build --target web
 EOF
 
 
-FROM debian:bullseye-slim AS final
+FROM debian:bookworm-slim as final
 
 
 # Copy the executable from the "build" stage.
